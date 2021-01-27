@@ -13,6 +13,8 @@ import org.springframework.data.mongodb.repository.config.EnableMongoRepositorie
 
 
 import com.rabbitmq.client.AMQP.BasicProperties;
+
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.util.List;
 import java.util.Properties;
@@ -52,6 +54,7 @@ public class BackupApplication  implements CommandLineRunner {
     private void subcribeToQueues(){
         subScripeToAddLdrSensor();
         subScripeToRemoveLdrSensor();
+        subScribeToGetAllLdrSensor();
     }
 
     private void subScripeToAddLdrSensor()  {
@@ -149,7 +152,46 @@ public class BackupApplication  implements CommandLineRunner {
         }
     }
 
+    private void subScribeToGetAllLdrSensor(){
+        System.out.println("getting all LDR");
+        String QUEUE_NAME = "GetAllLdr";
+        try {
+            channel.queueDeclare(QUEUE_NAME, true, false, false, null);
 
+            DeliverCallback callBackgetAllLdrSensor = (consumerTag, delivery) ->
+            {
+                List<LdrSensor> tempLdrList = ldrRepository.findAll();
+                ObjectMapper obj = new ObjectMapper();
+                String temp;
+
+                final ByteArrayOutputStream out = new ByteArrayOutputStream();
+
+                obj.writeValue(out,tempLdrList);
+
+                String tempJson = out.toString();
+                BasicProperties replyProps = new BasicProperties
+                        .Builder()
+                        .correlationId(delivery.getProperties().getCorrelationId())
+                        .build();
+                try{
+                }
+                catch(Exception e){
+                    System.out.println("Error :" + e.getMessage());
+                }
+                finally {
+                    System.out.println("Sending back : ");
+                    channel.basicPublish("", delivery.getProperties().getReplyTo(), replyProps, tempJson.getBytes("UTF-8"));
+                    channel.basicAck(delivery.getEnvelope().getDeliveryTag(), false);
+                }
+            };
+            channel.basicConsume(QUEUE_NAME, false, callBackgetAllLdrSensor, consumerTag -> { });
+            System.out.println("Listning to : " + QUEUE_NAME);
+        }
+        catch (Exception e){
+            System.out.println(e.getMessage());
+            System.out.println("Error happened");
+        }
+    }
 
     public void sendMessage(String exchange, String topic, String message){
         try
